@@ -74,7 +74,7 @@ bool readPostInt(Request &req, const char* key, int &out) {
 
   char buf[16];
   memset(buf, 0, sizeof(buf));
-  bool ok = req.form(tmp, strlen(tmp), buf, sizeof(buf)-1);
+  bool ok = req.form(tmp, sizeof(tmp), buf, sizeof(buf));
   if (!ok) {
     Serial.printf("Param %s puudub\n", key);
     return false;
@@ -91,7 +91,7 @@ bool readPostString(Request &req, const char* key, char* dst, int dstLen) {
 
   char value[64]; memset(value, 0, sizeof(value));
 
-  bool ok = req.form(name, strlen(name), value, sizeof(value)-1);
+  bool ok = req.form(name, sizeof(name), value, sizeof(value));
   if (!ok) return false;
 
   strncpy(dst, value, dstLen-1);
