@@ -67,6 +67,20 @@ void pushTime(float sec) {
 
 void resetTimes() { timesCount = 0; }
 
+void hexToRgb(const char* hex, int &r, int &g, int &b) {
+  if (hex[0] == '#') hex++; // skip #
+  char buf[3]; buf[2] = 0;
+
+  buf[0] = hex[0]; buf[1] = hex[1]; r = strtol(buf, NULL, 16);
+  buf[0] = hex[2]; buf[1] = hex[3]; g = strtol(buf, NULL, 16);
+  buf[0] = hex[4]; buf[1] = hex[5]; b = strtol(buf, NULL, 16);
+
+  // Scale 0-255 to 0-1023 for analogWrite
+  r = r * 1023 / 255;
+  g = g * 1023 / 255;
+  b = b * 1023 / 255;
+}
+
 // ---------- POST abifunktsioonid ----------
 bool readPostInt(Request &req, const char* key, int &out) {
   char tmp[24];
@@ -107,46 +121,52 @@ void naitaEsilehte(Request &req, Response &res) {
   res.println("<!doctype html><html lang='et'><meta charset='utf-8'>");
   res.println("<meta name='viewport' content='width=device-width, initial-scale=1.2'>");
   res.println("<title>Põrandapodi – reaktsiooniaeg</title>");
+  
+  // --- Styles ---
   res.println("<style>"
-              "body{font-family:Arial;margin:24px} h1{margin:0 0 12px 0}"
-              ".row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}"
-              "button{padding:10px 16px;font-size:16px;border:none;border-radius:8px;color:#fff;cursor:pointer}"
-              ".btn{background:#0d6efd}"
-              "input[type=text]{padding:8px 10px;font-size:16px;border:1px solid #ccc;border-radius:6px}"
-              "table{border-collapse:collapse;width:100%;max-width:640px;margin-top:10px}"
-              "th,td{border:1px solid #ddd;padding:8px;text-align:left}"
-              "th{background:#f7f7f7}"
-              "a{color:#0d6efd;text-decoration:none}"
-              ".pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#eee;margin-left:8px}"
-              "</style>");
-
+               "body{font-family:Arial;margin:24px}"
+               "h1{margin:0 0 12px 0}"
+               ".row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}"
+               "button{padding:10px 16px;font-size:16px;border:none;border-radius:8px;color:#fff;cursor:pointer}"
+               ".btn{background:#0d6efd}"
+               ".btn-threshold{background:#0d6efd}"
+               ".btn-color{background:#198754}" 
+               "input[type=text]{padding:8px 10px;font-size:16px;border:1px solid #ccc;border-radius:6px}"
+               "table{border-collapse:collapse;width:100%;max-width:640px;margin-top:10px}"
+               "th,td{border:1px solid #ddd;padding:8px;text-align:left}"
+               "th{background:#f7f7f7}"
+               "a{color:#0d6efd;text-decoration:none}"
+               ".pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#eee;margin-left:8px}"
+             "</style>");
+  
+  // --- Page header ---
   res.println("<h1>Põrandapodi – reaktsiooniaeg</h1>");
-
-  // Nime sisestamine
+  
+  // --- Name form ---
   res.println("<form class='row' action='/name' method='post'>"
-              "<label>Katse tegija nimi:</label>"
-              "<input type='text' name='name' placeholder='Sisesta nimi' value='");
+               "<label>Katse tegija nimi:</label>"
+               "<input type='text' name='name' placeholder='Sisesta nimi' value='");
   res.print(participantName);
   res.println("'> <button class='btn' type='submit'>Salvesta nimi</button></form>");
-
-  // START nupp
+  
+  // --- START button ---
   res.println("<form style='margin-top:10px' action='/start' method='post'>"
-              "<button class='btn'>START</button></form>");
-
-  // Olek
+               "<button class='btn'>START</button></form>");
+  
+  // --- Trial status ---
   res.print("<p style='margin-top:6px'>Olek: <b>");
   if (trialArmed && !trialDone) res.print("katse käib – lamp põleb, ootan anduri puudet");
   else if (trialDone)           res.print("katse lõpetatud – lamp kustu");
   else                          res.print("valmis uueks katseks – lamp kustu");
   res.println("</b></p>");
-
-  // Viimane aeg
+  
+  // --- Last reaction ---
   char buf[24];
   snprintf(buf, sizeof(buf), "%.2f", lastReactionMs / 1000.0f);
   res.println("<h3>Viimane aeg</h3>");
   res.print("<p><b>"); res.print(buf); res.println(" s</b></p>");
-
-  // Kõik ajad tabelina
+  
+  // --- All measured times ---
   res.println("<h3>Kõik mõõdetud ajad</h3>");
   if (timesCount == 0) res.println("<p>Veel pole ühtegi tulemust.</p>");
   else {
@@ -158,16 +178,23 @@ void naitaEsilehte(Request &req, Response &res) {
     }
     res.println("</table>");
   }
-
-  // Nupud: CSV ja reset
+  
+  // --- CSV / Reset / Config links ---
   res.println("<div class='row' style='margin-top:10px'>"
-              "<a href='/csv' class='btn' style='background:#198754;display:inline-block;padding:10px 16px;color:#fff;border-radius:8px'>Laadi alla CSV</a>"
-              "<form action='/reset' method='post' onsubmit='return confirm(\"Kustutan kõik ajad?\")'>"
-              "<button class='btn' style='background:#dc3545'>Reset</button></form>"
-              "<a href='/cfg'>⚙️ Anduri seaded</a>"
-              "</div>");
-
-  // Live anduri info
+               "<a href='/csv' class='btn' style='background:#198754;display:inline-block;padding:10px 16px;color:#fff;border-radius:8px'>Laadi alla CSV</a>"
+               "<form action='/reset' method='post' onsubmit='return confirm(\"Kustutan kõik ajad?\")'>"
+               "<button class='btn' style='background:#dc3545'>Reset</button></form>"
+               "<a href='/cfg'>⚙️ Anduri seaded</a>"
+               "</div>");
+  
+  // --- LED color buttons ---
+  res.println("<h3>Vali LED värvikomplekt</h3>");
+  res.println("<div class='row' style='gap:10px'>"
+               "<button class='btn-color' onclick=\"setColorPair('#d04a59','#ff206e')\">Komplekt 1</button>"
+               "<button class='btn-color' onclick=\"setColorPair('#ff9a38','#29bfff')\">Komplekt 2</button>"
+               "</div>");
+  
+  // --- LDR live info ---
   int raw = readLDRRaw(), lvl = ldrLevel();
   res.println("<hr><h3>Andur</h3>");
   res.print("<p>RAW: <b id='raw'>"); res.print(raw);
@@ -175,15 +202,35 @@ void naitaEsilehte(Request &req, Response &res) {
   res.print("</b> <span class='pill'>OFF lävi: "); res.print(LDR_OFF_THRESHOLD);
   res.print("</span> <span class='pill'>ON lävi: "); res.print(LDR_ON_THRESHOLD);
   res.println("</span></p>");
-
-  // Live uuendus
+  
+  // --- JavaScript: LDR tick + LED color sets ---
   res.println("<script>"
-              "async function tick(){try{const r=await fetch('/status');const j=await r.json();"
-              "document.getElementById('raw').textContent=j.raw;"
-              "document.getElementById('lvl').textContent=j.lvl;"
-              "}catch(e){}} setInterval(tick,1000); tick();"
-              "</script>");
-
+               "async function tick(){"
+                 "try{"
+                   "const r=await fetch('/status');"
+                   "const j=await r.json();"
+                   "document.getElementById('raw').textContent=j.raw;"
+                   "document.getElementById('lvl').textContent=j.lvl;"
+                 "}catch(e){}"
+               "}"
+               "setInterval(tick,1000); tick();"
+               
+               "function hexToRgb(hex){"
+                 "if(hex[0]=='#') hex=hex.substr(1);"
+                 "return [parseInt(hex.substr(0,2),16),parseInt(hex.substr(2,2),16),parseInt(hex.substr(4,2),16)];"
+               "}"
+               
+               "async function setColorPair(hex1,hex2){"
+                 "const rgb1=hexToRgb(hex1);"
+                 "const rgb2=hexToRgb(hex2);"
+                 "const data1=new URLSearchParams(); data1.append('color', hex1);"
+                 "const data2=new URLSearchParams(); data2.append('color', hex2);"
+                 "await fetch('/setcolor',{method:'POST', body:data1});"
+                 "await fetch('/setcolor',{method:'POST', body:data2});"
+                 "alert('LED värvikomplekt muudetud!');"
+               "}"
+             "</script>");
+  
   res.println("</html>");
 }
 
@@ -198,6 +245,7 @@ void naitaSeadeid(Request &req, Response &res) {
                "label{display:block;margin-top:12px;font-weight:bold}"
                "input[type=range]{width:100%}"
                "button{padding:10px 16px;border:none;border-radius:8px;background:#0d6efd;color:#fff;cursor:pointer;margin-top:12px}"
+               ".btn-threshold{background:#0d6efd;color:#fff;}"
                ".row{display:flex;gap:12px;align-items:center}"
                ".pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#eee;margin-left:8px}"
                "a{color:#0d6efd;text-decoration:none}</style>");
@@ -205,44 +253,25 @@ void naitaSeadeid(Request &req, Response &res) {
   res.println("<h2>⚙️ Valgusanduri seaded</h2>");
   
   // --- Vorm ---
-  res.println("<form action='/set' method='post'>");
-  res.print("<label>OFF lävi</label>");
-  res.print("<input type='range' id='off' name='off' min='0' max='1023' value='");
-  res.print(LDR_OFF_THRESHOLD);
-  res.println("' oninput='offVal.value=this.value'>");
-  res.print("<div class='row'>Väärtus: <output id='offVal'>");
-  res.print(LDR_OFF_THRESHOLD);
-  res.println("</output></div>");
+  res.println("<h2>⚙️ Valgusanduri seaded</h2>");
 
-  res.print("<label>ON lävi</label>");
-  res.print("<input type='range' id='on' name='on' min='0' max='1023' value='");
-  res.print(LDR_ON_THRESHOLD);
-  res.println("' oninput='onVal.value=this.value'>");
-  res.print("<div class='row'>Väärtus: <output id='onVal'>");
-  res.print(LDR_ON_THRESHOLD);
-  res.println("</output></div>");
+// Buttons with hard-coded threshold values
+res.println("<div class='row' style='gap:10px'>"
+             "<button onclick='setThreshold(100)' class='btn-threshold'>100</button>"
+             "<button onclick='setThreshold(150)' class='btn-threshold'>150</button>"
+             "<button onclick='setThreshold(200)' class='btn-threshold'>200</button>"
+             "<button onclick='setThreshold(250)' class='btn-threshold'>250</button>"
+             "</div>");
 
-  res.println("<div class='row'>"
-               "<button type='submit'>Salvesta</button>"
-               "<button type='button' id='resetDefaults' style='background:#6c757d'>Taasta vaikeseaded</button>"
-               "</div>");
-  res.println("</form>");
-
-  // --- JS: vaikeseaded ja test POST ---
-  res.println("<script>"
-               "const DEFAULTS={off:520,on:620};"
-               "document.getElementById('resetDefaults').addEventListener('click', async ()=>{"
-                 "document.getElementById('off').value=DEFAULTS.off;"
-                 "document.getElementById('on').value=DEFAULTS.on;"
-                 "document.getElementById('offVal').value=DEFAULTS.off;"
-                 "document.getElementById('onVal').value=DEFAULTS.on;"
-                 "const d=new URLSearchParams();"
-                 "d.append('off',DEFAULTS.off);"
-                 "d.append('on',DEFAULTS.on);"
-                 "await fetch('/set',{method:'POST',body:d,headers:{'Content-Type':'application/x-www-form-urlencoded'}});"
-                 "alert('Vaikeseaded taastatud ja salvestatud!');"
-               "});"
-             "</script>");
+// JS function to POST the selected value
+res.println("<script>"
+             "async function setThreshold(val){"
+               "const data = new URLSearchParams();"
+               "data.append('value', val);"
+               "await fetch('/set', {method:'POST', body:data});"
+               "alert('LDR threshold set to ' + val);"
+             "}"
+           "</script>");
   
   res.println("</html>");
 }
@@ -298,29 +327,19 @@ void saveName(Request &req, Response &res) {
 void salvestaSeaded(Request &req, Response &res) {
   Serial.println("--- SALVESTAN SEADED ---");
 
-  int offv = LDR_OFF_THRESHOLD;
-  int onv  = LDR_ON_THRESHOLD;
+  int val = LDR_OFF_THRESHOLD; // default to current value
+  if (readPostInt(req, "value", val)) {
+    // Clamp value
+    if (val < 0) val = 0;
+    if (val > 1023) val = 1023;
 
-  readPostInt(req, "off", offv);
-  readPostInt(req, "on", onv);
+    LDR_OFF_THRESHOLD = val;
+    LDR_ON_THRESHOLD  = val + 100; // ON is 100 above OFF
+    Serial.printf("Uued väärtused: OFF=%d, ON=%d\n", LDR_OFF_THRESHOLD, LDR_ON_THRESHOLD);
+  }
 
-  // Piira vahemikku
-  if (offv < 0) offv = 0; if (offv > 1023) offv = 1023;
-  if (onv < 0)  onv = 0;  if (onv > 1023)  onv = 1023;
-
-  LDR_OFF_THRESHOLD = offv;
-  LDR_ON_THRESHOLD  = onv;
-
-  Serial.printf("Uued väärtused: OFF=%d, ON=%d\n",
-                LDR_OFF_THRESHOLD, LDR_ON_THRESHOLD);
-
-  res.status(200);
-  res.set("Content-Type", "text/plain; charset=utf-8");
-  res.println("OK");
-  res.end();
+  redirectHome(res);
 }
-
-
 
 void doReset(Request &req, Response &res) {
   resetTimes();
@@ -328,6 +347,18 @@ void doReset(Request &req, Response &res) {
   trialArmed = false; trialDone=false;
   setLedColor(0,0,0);
   Serial.println("Kõik ajad kustutatud.");
+  redirectHome(res);
+}
+
+void setColorHandler(Request &req, Response &res) {
+  char colorHex[8]; // expect #RRGGBB
+  if(readPostString(req, "color", colorHex, sizeof(colorHex))) {
+    int r, g, b;
+    hexToRgb(colorHex, r, g, b);
+    activeR = r; activeG = g; activeB = b;
+    setLedColor(activeR, activeG, activeB);
+    Serial.printf("LED color set to %s -> R=%d G=%d B=%d\n", colorHex, r, g, b);
+  }
   redirectHome(res);
 }
 
@@ -354,6 +385,7 @@ void setup() {
   app.post("/start",startTrial);
   app.post("/name",saveName);
   app.post("/reset",doReset);
+  app.post("/setcolor", setColorHandler);
 
   server.begin();
   Serial.println("Veebiserver kuulab pordil 80.");
