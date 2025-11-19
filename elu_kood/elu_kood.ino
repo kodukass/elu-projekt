@@ -2,6 +2,15 @@
 #include <ESP8266WiFi.h>
 #include <aWOT.h>
 #include <cstring> // strlen, strncpy, memset, snprintf
+#include <EEPROM.h>
+
+// EEPROM layout
+#define EEPROM_SIZE 16        // enough for 2 thresholds + 3 RGB values (4 bytes each)
+#define ADDR_LDR_OFF 0        // 2 bytes
+#define ADDR_LDR_ON 2         // 2 bytes
+#define ADDR_LED_R 4          // 2 bytes each
+#define ADDR_LED_G 6
+#define ADDR_LED_B 8
 
 // 1) WiFi seaded AP
 const char* WIFI_NIMI   = "PÕRANDAPOD_WIFI";
@@ -79,6 +88,32 @@ void hexToRgb(const char* hex, int &r, int &g, int &b) {
   r = r * 1023 / 255;
   g = g * 1023 / 255;
   b = b * 1023 / 255;
+}
+
+void saveSettingsToEEPROM() {
+  EEPROM.begin(EEPROM_SIZE);
+
+  EEPROM.put(ADDR_LDR_OFF, LDR_OFF_THRESHOLD);
+  EEPROM.put(ADDR_LDR_ON,  LDR_ON_THRESHOLD);
+  EEPROM.put(ADDR_LED_R,   activeR);
+  EEPROM.put(ADDR_LED_G,   activeG);
+  EEPROM.put(ADDR_LED_B,   activeB);
+
+  EEPROM.commit();
+  Serial.println("Seaded salvestatud EEPROMi.");
+}
+
+void loadSettingsFromEEPROM() {
+  EEPROM.begin(EEPROM_SIZE);
+
+  EEPROM.get(ADDR_LDR_OFF, LDR_OFF_THRESHOLD);
+  EEPROM.get(ADDR_LDR_ON,  LDR_ON_THRESHOLD);
+  EEPROM.get(ADDR_LED_R,   activeR);
+  EEPROM.get(ADDR_LED_G,   activeG);
+  EEPROM.get(ADDR_LED_B,   activeB);
+
+  Serial.printf("EEPROMist loetud: OFF=%d, ON=%d, R=%d G=%d B=%d\n",
+                LDR_OFF_THRESHOLD, LDR_ON_THRESHOLD, activeR, activeG, activeB);
 }
 
 // ---------- POST abifunktsioonid ----------
@@ -236,46 +271,69 @@ void naitaEsilehte(Request &req, Response &res) {
 
 // ---------- Anduri seaded ----------
 void naitaSeadeid(Request &req, Response &res) {
-  res.set("Content-Type", "text/html; charset=utf-8");
-  res.println("<!doctype html><html lang='et'><meta charset='utf-8'>");
-  res.println("<meta name='viewport' content='width=device-width, initial-scale=1.0'>");
-  res.println("<title>Anduri seaded</title>");
-  res.println("<style>"
-               "body{font-family:Arial;margin:20px;max-width:640px}"
-               "label{display:block;margin-top:12px;font-weight:bold}"
-               "input[type=range]{width:100%}"
-               "button{padding:10px 16px;border:none;border-radius:8px;background:#0d6efd;color:#fff;cursor:pointer;margin-top:12px}"
-               ".btn-threshold{background:#0d6efd;color:#fff;}"
-               ".row{display:flex;gap:12px;align-items:center}"
-               ".pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#eee;margin-left:8px}"
-               "a{color:#0d6efd;text-decoration:none}</style>");
+    res.set("Content-Type", "text/html; charset=utf-8");
 
-  res.println("<h2>⚙️ Valgusanduri seaded</h2>");
-  
-  // --- Vorm ---
-  res.println("<h2>⚙️ Valgusanduri seaded</h2>");
+    res.println("<!doctype html><html lang='et'><head>");
+    res.println("<meta charset='utf-8'>");
+    res.println("<meta name='viewport' content='width=device-width, initial-scale=1.0'>");
+    res.println("<title>Anduri seaded</title>");
 
-// Buttons with hard-coded threshold values
-res.println("<div class='row' style='gap:10px'>"
-             "<button onclick='setThreshold(100)' class='btn-threshold'>100</button>"
-             "<button onclick='setThreshold(150)' class='btn-threshold'>150</button>"
-             "<button onclick='setThreshold(200)' class='btn-threshold'>200</button>"
-             "<button onclick='setThreshold(250)' class='btn-threshold'>250</button>"
-             "</div>");
+    // CSS
+    res.println("<style>"
+                "body{font-family:Arial;margin:20px;max-width:640px}"
+                "button{padding:10px 16px;border:none;border-radius:8px;"
+                "background:#0d6efd;color:#fff;cursor:pointer;font-size:16px}"
+                ".gray{background:#6c757d}"
+                ".row{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}"
+                "</style></head><body>");
 
-// JS function to POST the selected value
-res.println("<script>"
-             "async function setThreshold(val){"
-               "const data = new URLSearchParams();"
-               "data.append('value', val);"
-               "await fetch('/set', {method:'POST', body:data});"
-               "alert('LDR threshold set to ' + val);"
-             "}"
-           "</script>");
-  
-  res.println("</html>");
+    res.println("<h2> Valgusanduri seaded</h2>");
+
+    // OFF threshold buttons
+    res.println("<p>Vali OFF lävi:</p>");
+    res.println("<div class='row'>"
+                "<button onclick='setOff(100)'>100</button>"
+                "<button onclick='setOff(150)'>150</button>"
+                "<button onclick='setOff(200)'>200</button>"
+                "<button onclick='setOff(250)'>250</button>"
+                "</div>");
+
+    // ON threshold buttons
+    res.println("<p>Vali ON lävi:</p>");
+    res.println("<div class='row'>"
+                "<button onclick='setOn(300)'>300</button>"
+                "<button onclick='setOn(350)'>350</button>"
+                "<button onclick='setOn(400)'>400</button>"
+                "<button onclick='setOn(450)'>450</button>"
+                "</div>");
+
+    // Reset button
+    res.println("<div class='row'>"
+                "<button class='gray' onclick='resetDefaults()'>Taasta vaikeseaded</button>"
+                "</div>");
+
+    // JavaScript
+    res.println("<script>"
+                "let offVal = 520;"
+                "let onVal  = 620;"
+
+                "async function send(){"
+                    "const data=new URLSearchParams();"
+                    "data.append('off', offVal);"
+                    "data.append('on',  onVal);"
+                    "await fetch('/set',{method:'POST',body:data});"
+                "}"
+
+                "function setOff(v){ offVal=v; send(); }"
+                "function setOn(v){  onVal=v; send(); }"
+
+                "function resetDefaults(){"
+                    "offVal=520; onVal=620; send(); alert('Vaikeseaded taastatud!');"
+                "}"
+                "</script>");
+
+    res.println("</body></html>");
 }
-
 
 // ---------- JSON / CSV ----------
 void statusJson(Request &req, Response &res) {
@@ -335,6 +393,7 @@ void salvestaSeaded(Request &req, Response &res) {
 
     LDR_OFF_THRESHOLD = val;
     LDR_ON_THRESHOLD  = val + 100; // ON is 100 above OFF
+    saveSettingsToEEPROM();
     Serial.printf("Uued väärtused: OFF=%d, ON=%d\n", LDR_OFF_THRESHOLD, LDR_ON_THRESHOLD);
   }
 
@@ -357,6 +416,7 @@ void setColorHandler(Request &req, Response &res) {
     hexToRgb(colorHex, r, g, b);
     activeR = r; activeG = g; activeB = b;
     setLedColor(activeR, activeG, activeB);
+    saveSettingsToEEPROM();
     Serial.printf("LED color set to %s -> R=%d G=%d B=%d\n", colorHex, r, g, b);
   }
   redirectHome(res);
@@ -369,6 +429,8 @@ void setup() {
   pinMode(RED_PIN,OUTPUT); pinMode(GREEN_PIN,OUTPUT); pinMode(BLUE_PIN,OUTPUT);
   analogWriteRange(1023);
   pinMode(LDR_PIN,INPUT);
+  loadSettingsFromEEPROM();
+  setLedColor(activeR, activeG, activeB);
 
   Serial.println("Käivitan Wi-Fi AP...");
   int tulemus = WiFi.softAP(WIFI_NIMI,WIFI_PAROOL);
