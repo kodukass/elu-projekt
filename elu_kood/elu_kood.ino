@@ -36,6 +36,37 @@ bool trialDone      = false;
 unsigned long trialStartMs = 0;
 unsigned long lastReactionMs = 0;
 
+//tabel
+struct Result {
+    String name;
+    unsigned long timeMs;
+};
+
+Result results[30];
+int resultCount = 0;
+
+// --- Leaderboard functions ---
+void addResult(String name, unsigned long timeMs) {
+    if (resultCount < 30) {
+        results[resultCount].name = name;
+        results[resultCount].timeMs = timeMs;
+        resultCount++;
+    }
+}
+
+void sortResults() {
+    for (int i = 0; i < resultCount - 1; i++) {
+        for (int j = i + 1; j < resultCount; j++) {
+            if (results[j].timeMs < results[i].timeMs) {
+                Result tmp = results[i];
+                results[i] = results[j];
+                results[j] = tmp;
+            }
+        }
+    }
+}
+
+
 // --- Katsete logi ---
 static const int MAX_TIMES = 200;
 float timesSec[MAX_TIMES];
@@ -203,7 +234,22 @@ void naitaEsilehte(Request &req, Response &res) {
   
   // --- All measured times ---
   res.println("<h3>Kõik mõõdetud ajad</h3>");
-  if (timesCount == 0) res.println("<p>Veel pole ühtegi tulemust.</p>");
+  // --- Leaderboard table ---
+res.println("<h3>Edetabel</h3>");
+if (resultCount == 0) {
+    res.println("<p>Edetabel on tühi.</p>");
+} else {
+    res.println("<table><tr><th>#</th><th>Nimi</th><th>Aeg (ms)</th></tr>");
+    for (int i = 0; i < resultCount; i++) {
+        res.printf("<tr><td>%d</td><td>%s</td><td>%lu</td></tr>",
+                   i + 1,
+                   results[i].name.c_str(),
+                   results[i].timeMs);
+    }
+    res.println("</table>");
+}
+
+  /*if (timesCount == 0) res.println("<p>Veel pole ühtegi tulemust.</p>");
   else {
     res.println("<table><tr><th>#</th><th>Aeg (s)</th></tr>");
     for (int i=0; i<timesCount; ++i) {
@@ -212,7 +258,7 @@ void naitaEsilehte(Request &req, Response &res) {
       res.print("</td><td>"); res.print(tbuf); res.println("</td></tr>");
     }
     res.println("</table>");
-  }
+  }*/
   
   // --- CSV / Reset / Config links ---
   res.println("<div class='row' style='margin-top:10px'>"
@@ -377,37 +423,64 @@ void startTrial(Request &req, Response &res) {
 }
 
 void saveName(Request &req, Response &res) {
-  readPostString(req,"name",participantName,sizeof(participantName));
-  Serial.print("Nimi salvestatud: "); Serial.println(participantName);
-  redirectHome(res);
+    readPostString(req, "name", participantName, sizeof(participantName));
+
+    // Trim whitespace at start/end
+    String temp = String(participantName);
+    temp.trim();
+
+    // If empty → replace with "nimetu"
+    if (temp.length() == 0) {
+        temp = "Nimetu";
+    }
+
+    // Copy back into participantName buffer
+    temp.toCharArray(participantName, sizeof(participantName));
+
+    Serial.print("Nimi salvestatud: ");
+    Serial.println(participantName);
+
+    redirectHome(res);
 }
+
 
 void salvestaSeaded(Request &req, Response &res) {
   Serial.println("--- SALVESTAN SEADED ---");
 
-  int val = LDR_OFF_THRESHOLD; // default to current value
-  if (readPostInt(req, "value", val)) {
-    // Clamp value
-    if (val < 0) val = 0;
-    if (val > 1023) val = 1023;
+  int offTmp = LDR_OFF_THRESHOLD;
+  int onTmp  = LDR_ON_THRESHOLD;
 
-    LDR_OFF_THRESHOLD = val;
-    LDR_ON_THRESHOLD  = val + 100; // ON is 100 above OFF
-    saveSettingsToEEPROM();
-    Serial.printf("Uued väärtused: OFF=%d, ON=%d\n", LDR_OFF_THRESHOLD, LDR_ON_THRESHOLD);
+  // Read OFF
+  if (readPostInt(req, "off", offTmp)) {
+    offTmp = constrain(offTmp, 0, 1023);
+    LDR_OFF_THRESHOLD = offTmp;
+    Serial.printf("Uus OFF = %d\n", LDR_OFF_THRESHOLD);
   }
+
+  // Read ON
+  if (readPostInt(req, "on", onTmp)) {
+    onTmp = constrain(onTmp, 0, 1023);
+    LDR_ON_THRESHOLD = onTmp;
+    Serial.printf("Uus ON = %d\n", LDR_ON_THRESHOLD);
+  }
+
+  Serial.printf("Lõplikud väärtused: OFF=%d, ON=%d\n", LDR_OFF_THRESHOLD, LDR_ON_THRESHOLD);
 
   redirectHome(res);
 }
+
 
 void doReset(Request &req, Response &res) {
   resetTimes();
+  resultCount = 0;   // <-- CLEAR LEADERBOARD
   lastReactionMs = 0;
-  trialArmed = false; trialDone=false;
+  trialArmed = false;
+  trialDone = false;
   setLedColor(0,0,0);
-  Serial.println("Kõik ajad kustutatud.");
+  Serial.println("Kõik ajad kustutatud + edetabel tühjendatud.");
   redirectHome(res);
 }
+
 
 void setColorHandler(Request &req, Response &res) {
   char colorHex[8]; // expect #RRGGBB
@@ -457,15 +530,30 @@ void loop() {
   WiFiClient klient = server.available();
   if(klient){ app.process(&klient); klient.stop(); }
 
+  /*Serial.print("A0 raw = ");
+  Serial.println(analogRead(A0));
+  delay(500);*/
+
   if(trialArmed && !trialDone){
     setLedColor(activeR,activeG,activeB);
     int lvl=ldrLevel();
-    if(lvl<LDR_OFF_THRESHOLD){
-      lastReactionMs=millis()-trialStartMs;
-      pushTime(lastReactionMs/1000.0f);
-      trialDone=true; trialArmed=false;
-      setLedColor(0,0,0);
-      Serial.printf("KATSE LÕPP — aeg: %.2f s.\n", lastReactionMs/1000.0f);
+    if (lvl < LDR_OFF_THRESHOLD) {
+    lastReactionMs = millis() - trialStartMs;
+
+    // OLD array (keep it alive)
+    pushTime(lastReactionMs / 1000.0f);
+
+    // NEW leaderboard entry
+    addResult(String(participantName), lastReactionMs);
+    sortResults();
+
+    trialDone = true;
+    trialArmed = false;
+    setLedColor(0, 0, 0);
+
+    Serial.printf("KATSE LÕPP — aeg: %.2f s.\n", lastReactionMs / 1000.0f);
+    
+
     }
   } else setLedColor(0,0,0);
 
