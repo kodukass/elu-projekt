@@ -12,6 +12,9 @@ const int UDP_PORT = 4210;
 
 void redirectHome(Response &res);
 
+unsigned long lastLampScan = 0;
+const unsigned long LAMP_SCAN_INTERVAL = 10000; // every 3 seconds
+
 // Master lamp hardware pins
 const int LDR_PIN = A0;           // Light sensor pin
 const int LED_R_PIN = D5;         // Example: Red channel
@@ -61,6 +64,8 @@ int resultCount = 0;
 struct Lamp {
   String ip;
   String name;
+  bool online = false;
+  unsigned long lastSeen = 0;
   int LDR_OFF_THRESHOLD = 420;
   int LDR_ON_THRESHOLD  = 520;
 };
@@ -121,64 +126,92 @@ void sortResults(){
   }
 }
 
-// Quick lamp-online check (fast TCP connect)
+// Quick lamp-online check using a tiny HTTP GET to /ping with a short timeout.
+// Returns true if the lamp replies quickly (HTTP 200).
 bool isLampOnline(const String &ip) {
   if (ip.length() < 7) return false;
-  WiFiClient c;
-  bool ok = c.connect(ip.c_str(), 80);
-  c.stop();
-  return ok;
+
+  WiFiClient client;
+  HTTPClient http;
+  String url = "http://" + ip + "/ping";
+
+  // begin with WiFiClient to avoid blocking DNS/SSL variants
+  if (!http.begin(client, url)) {
+    http.end();
+    return false;
+  }
+  http.setTimeout(250);              // 250 ms max
+  int code = http.GET();
+  http.end();
+  return (code == 200);
 }
+
+
+void printLampStatus() {
+    Serial.println("----- Lamp Connection Status -----");
+
+    for (int i = 0; i < 5; i++) {
+        bool online = isLampOnline(lamps[i].ip);
+        lamps[i].online = online;
+        if (online) {
+            lamps[i].lastSeen = millis();
+            Serial.printf("%s (%s) ONLINE\n",
+                          lamps[i].name.c_str(),
+                          lamps[i].ip.c_str());
+        } else {
+            Serial.printf("%s (%s) OFFLINE\n",
+                          lamps[i].name.c_str(),
+                          lamps[i].ip.c_str());
+        }
+    }
+
+    // Master itself:
+    String myIp = WiFi.softAPIP().toString();
+    Serial.printf("Master (%s) %s\n", myIp.c_str(), "ONLINE");
+
+    Serial.println("----------------------------------");
+}
+
+
 
 // Stop all lamps
 void stopAllLamps(){
     for(int i=0;i<5;i++){
-        // Send stop command without waiting for HTTP GET to complete
         WiFiClient client;
         HTTPClient http;
-
         String url = "http://" + lamps[i].ip + "/stop";
-
         if(http.begin(client, url)){
-            http.setTimeout(300); // 0.3s max per lamp
-            http.GET();           // fire-and-forget
+            http.setTimeout(200); // 200 ms max per attempt
+            http.GET();           // fire-and-forget-ish
             http.end();
         }
     }
+    // Also stop master immediately
+    lampRunning = false;
 }
 
 
 int pickRandomOnlineLamp() {
-    int onlineIndices[6];   // extra slot for master
+    int onlineIndices[6];   // we may put up to 6 entries (5 slaves + master code)
     int onlineCount = 0;
 
+    // Check slaves quickly and use cached ladders (isLampOnline uses short timeout)
     for(int i=0;i<5;i++){
-        WiFiClient client;
-        HTTPClient http;
-        String url = "http://" + lamps[i].ip + "/status";
-
-        if(http.begin(client, url)){
-            http.setTimeout(300);
-            int code = http.GET();
-            http.end();
-            if(code == 200){
-                onlineIndices[onlineCount++] = i; 
-            }
+        if(isLampOnline(lamps[i].ip)) {
+            onlineIndices[onlineCount++] = i;
         }
     }
 
-    // Include master lamp itself
-    onlineIndices[onlineCount++] = 5; // index 5 = master
+    // Optionally include master as selectable. We'll encode master as index 5.
+    // Include master if you want the master hardware lamp to be part of the pool:
+    // (You said master is also a lamp — include it)
+    onlineIndices[onlineCount++] = 5; // 5 == master
 
-    if(onlineCount == 0) return -1;
+    if(onlineCount == 0) return -1; // shouldn't happen because master added, but safe
 
-    int idx = random(0, onlineCount);
-    return onlineIndices[idx];
+    int pick = random(0, onlineCount);
+    return onlineIndices[pick];
 }
-
-
-
-
 
 bool sendToLamp(String ip, String path, String value) {
     IPAddress addr;
@@ -376,6 +409,7 @@ void naitaEsilehte(Request &req, Response &res){
   // --- Controls row: START, SETTINGS, REFRESH ---
   res.println("<div class='row' style='margin-top:10px'>");
   res.println("<form action='/start' method='post' style='margin:0'><button class='btn'>START</button></form>");
+  res.println("<form action='/stoptest' method='post' style='margin:0'><button class='btn-ghost' style='margin-left:8px;background:#dc3545'>STOP TEST</button></form>");
   res.println("<form action='/cfg' method='get' style='margin:0'><button class='btn-ghost' style='margin-left:8px'>Settings</button></form>");
   res.println("<form action='/refresh' method='post' style='margin:0'><button class='btn' style='margin-left:8px;background:#198754'>Refresh leaderboard</button></form>");
   res.println("</div>");
@@ -420,6 +454,19 @@ void startTrial(Request &req, Response &res){
   startTrialFlag = true; // set flag
   res.status(303); res.set("Location","/"); res.println("OK");
 }
+
+void stopTestHandler(Request &req, Response &res) {
+    Serial.println("STOP TEST pressed — stopping all lamps.");
+    stopAllLamps();   // already implemented
+    lampRunning = false;
+    activeLamp = -1;
+    lastReaction = 0;
+
+    res.status(303);
+    res.set("Location","/");
+    res.print("OK");
+}
+
 
 // setColorHandler used for single-lamp color posts (but main page uses /setcolor?lamp=i)
 void setColorHandler(Request &req, Response &res){
@@ -607,6 +654,7 @@ void setup(){
 
   app.get("/", naitaEsilehte);
   app.post("/start", startTrial);
+  app.post("/stoptest", stopTestHandler);
   app.post("/setcolor", setColorHandler);      // legacy/broadcast
   app.get("/cfg", naitaSeadeid);
   app.post("/setthreshold", setThresholdHandler);
@@ -615,15 +663,47 @@ void setup(){
   app.post("/stoplamp", stopLampHandler);
   app.post("/refresh", refreshHandler);
 
+  app.get("/ping", [](Request &req, Response &res) {
+    res.set("Content-Type", "text/plain");
+    res.println("OK");
+  });
+
+  app.get("/online", [](Request &req, Response &res) {
+
+    char idBuf[4] = {0};
+    int lampID = -1;
+
+    // Try to read "?id=1" from URL
+    if (req.query("id", idBuf, sizeof(idBuf))) {
+        lampID = atoi(idBuf);
+    }
+
+    if (lampID >= 0 && lampID < 5) {
+        lamps[lampID].online = true;
+        lamps[lampID].lastSeen = millis();
+
+        Serial.printf("Lamp %d reported ONLINE\n", lampID);
+    }
+
+    res.sendStatus(200);
+  });
+
   server.begin();
   Serial.println("Master webserver listening...");
+
 }
 
 void loop(){
     WiFiClient client = server.available();
-    if(client){ 
-        app.process(&client); 
-        client.stop(); 
+    if (client) {
+        app.process(&client);
+        client.stop();
+    }
+
+    // Periodic online/offline report (non-blocking)
+    if (millis() - lastLampScan > LAMP_SCAN_INTERVAL) {
+        lastLampScan = millis();
+        printLampStatus();
     }
 
     // Run slow ops non-blocking

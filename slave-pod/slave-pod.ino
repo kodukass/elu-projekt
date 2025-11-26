@@ -10,6 +10,10 @@ const int PIN_R = D5;
 const int PIN_G = D4;
 const int PIN_B = D3;
 
+WiFiServer httpServer(80);
+
+#define LAMP_ID 1 //--------------------------------------igal lambil erinev----------------------//
+
 void setLED(int r, int g, int b) {
     analogWrite(PIN_R, r);
     analogWrite(PIN_G, g);
@@ -35,6 +39,32 @@ LampState lamp;
 const char* ssid = "PÕRANDAPOD_MASTER"; // master AP
 const char* password = "salajane123";
 
+void reportToMaster() {
+    WiFiClient client;
+    if (client.connect("192.168.4.1", 80)) {
+        client.print("GET /online?id=");
+        client.print(LAMP_ID);
+        client.println(" HTTP/1.1");
+        client.println("Host: 192.168.4.1");
+        client.println("Connection: close");
+        client.println();
+    }
+}
+
+void reportOnline() {
+    HTTPClient http;
+    WiFiClient client;
+
+    String url = "http://192.168.4.1/online?id=" + String(LAMP_ID);
+
+    if (http.begin(client, url)) {
+        http.GET();
+        http.end();
+    }
+}
+
+unsigned long lastPing = 0;
+
 void setup() {
   Serial.begin(115200);
 
@@ -47,12 +77,15 @@ void setup() {
   Serial.println();
   Serial.print("Connected, IP: "); Serial.println(WiFi.localIP());
 
+  // IMPORTANT: start HTTP server!
+  httpServer.begin();                 // <<< ADD THIS
+
   udp.begin(UDP_PORT);
   Serial.println("Listening for master commands on UDP port 4210");
 }
 
+
 void processCommand(String cmd) {
-  // Expected format: path|payload
   int sep = cmd.indexOf('|');
   String path = cmd.substring(0, sep);
   String payload = (sep > 0) ? cmd.substring(sep + 1) : "";
@@ -70,7 +103,6 @@ void processCommand(String cmd) {
         lamp.color[1] = (val >> 8) & 0xFF;
         lamp.color[2] = val & 0xFF;
         Serial.printf("Color set: R=%d G=%d B=%d\n", lamp.color[0], lamp.color[1], lamp.color[2]);
-        setLED(lamp.color[0], lamp.color[1], lamp.color[2]); // immediately update LED
     }
   } else if(path == "/set") {
     int pOff = payload.indexOf("off=");
@@ -81,71 +113,91 @@ void processCommand(String cmd) {
   }
 }
 
-void checkUDP() {
-  int packetSize = udp.parsePacket();
-  if(packetSize) {
-    char buf[128] = {0};
-    int len = udp.read(buf, sizeof(buf)-1);
-    if(len>0) buf[len] = 0;
-    String cmd = String(buf);
-    processCommand(cmd);
-  }
-}
-
 void checkLDR() {
     if(lamp.running) {
-        int val = readLDR(); // read analog value
+        int val = readLDR();
         if(val > lamp.LDR_ON_THRESHOLD) {
             lamp.lastReactionMs = millis();
-            lamp.running = false;
+            lamp.running = false; // stop lamp
             Serial.printf("Reaction detected! Time: %lu ms\n", lamp.lastReactionMs);
         }
-        // Update LED while lamp is running
-        setLED(lamp.color[0], lamp.color[1], lamp.color[2]);
-    } else {
-        // turn off LED when lamp is stopped
-        setLED(0,0,0);
     }
 }
 
-
-void handleHTTP() {
-  WiFiClient client = WiFiServer(80).available();
-  if(!client) return;
-
-  String req = client.readStringUntil('\r');
-  client.flush();
-
-  if(req.indexOf("/status") >= 0) {
-    client.println("HTTP/1.1 200 OK");
-    client.println("Content-Type: application/json");
-    client.println("Connection: close");
-    client.println();
-    client.printf("{\"name\":\"Slave Lamp\",\"lastReactionMs\":%lu}\n", lamp.lastReactionMs);
-  } else {
-    client.println("HTTP/1.1 200 OK");
-    client.println("Content-Type: text/plain");
-    client.println("Connection: close");
-    client.println();
-    client.println("OK");
-  }
-  client.stop();
+void updateLED() {
+    // Single authoritative place for LED
+    if(lamp.running) setLED(lamp.color[0], lamp.color[1], lamp.color[2]);
+    else setLED(0,0,0);
 }
 
-WiFiServer httpServer(80);
+void checkUDP() { 
+  int packetSize = udp.parsePacket(); 
+  if(packetSize) { 
+    char buf[128] = {0}; 
+    int len = udp.read(buf, sizeof(buf)-1); 
+    if(len>0) 
+      buf[len] = 0; 
+      String cmd = String(buf); 
+      processCommand(cmd); 
+      } 
+  }
+
+
+
+void handleHTTP() {
+    WiFiClient client = httpServer.available();
+    if (!client) return;
+
+    String req = client.readStringUntil('\r');
+    client.flush();
+
+    // ---- PING endpoint (master uses this!) ----
+    if (req.indexOf("GET /ping") >= 0) {
+        client.println("HTTP/1.1 200 OK");
+        client.println("Content-Type: text/plain");
+        client.println("Connection: close");
+        client.println();
+        client.println("pong");
+    }
+
+    // ---- ONLINE confirmation (optional, but good) ----
+    else if (req.indexOf("GET /online") >= 0) {
+        client.println("HTTP/1.1 200 OK");
+        client.println("Content-Type: text/plain");
+        client.println("Connection: close");
+        client.println();
+        client.println("OK");
+    }
+
+    // ---- STATUS ----
+    else if (req.indexOf("GET /status") >= 0) {
+        client.println("HTTP/1.1 200 OK");
+        client.println("Content-Type: application/json");
+        client.println("Connection: close");
+        client.println();
+        client.printf("{\"name\":\"Slave Lamp %d\",\"lastReactionMs\":%lu}\n",
+                      LAMP_ID, lamp.lastReactionMs);
+    }
+
+    // ---- DEFAULT ----
+    else {
+        client.println("HTTP/1.1 404 Not Found");
+        client.println("Connection: close");
+        client.println();
+    }
+
+    client.stop();
+}
 
 void loop() {
   checkUDP();
   checkLDR();
+  handleHTTP();
+  updateLED();      // sets physical LED correctly
 
-  WiFiClient client = httpServer.available();
-if (client) {
-    // read the request and process it
-    // Example: parse the incoming line
-    String req = client.readStringUntil('\r');
-    // do something with 'req'
-    client.flush();
-    client.stop();
-}
+  if (millis() - lastPing > 3000) {
+        lastPing = millis();
+        reportOnline();
+    }
 
 }
