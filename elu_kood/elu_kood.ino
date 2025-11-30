@@ -35,6 +35,8 @@ bool trialArmed     = false;
 bool trialDone      = false;
 unsigned long trialStartMs = 0;
 unsigned long lastReactionMs = 0;
+bool waitingForRandom = false;
+unsigned long randomDelayEndMs = 0;
 
 //tabel
 struct Result {
@@ -235,19 +237,19 @@ void naitaEsilehte(Request &req, Response &res) {
   // --- All measured times ---
   res.println("<h3>Kõik mõõdetud ajad</h3>");
   // --- Leaderboard table ---
-res.println("<h3>Edetabel</h3>");
-if (resultCount == 0) {
-    res.println("<p>Edetabel on tühi.</p>");
-} else {
-    res.println("<table><tr><th>#</th><th>Nimi</th><th>Aeg (ms)</th></tr>");
-    for (int i = 0; i < resultCount; i++) {
-        res.printf("<tr><td>%d</td><td>%s</td><td>%lu</td></tr>",
-                   i + 1,
-                   results[i].name.c_str(),
-                   results[i].timeMs);
-    }
-    res.println("</table>");
-}
+  res.println("<h3>Edetabel</h3>");
+  if (resultCount == 0) {
+      res.println("<p>Edetabel on tühi.</p>");
+  } else {
+      res.println("<table><tr><th>#</th><th>Nimi</th><th>Aeg (ms)</th></tr>");
+      for (int i = 0; i < resultCount; i++) {
+          res.printf("<tr><td>%d</td><td>%s</td><td>%lu</td></tr>",
+                    i + 1,
+                    results[i].name.c_str(),
+                    results[i].timeMs);
+      }
+      res.println("</table>");
+  }
 
   /*if (timesCount == 0) res.println("<p>Veel pole ühtegi tulemust.</p>");
   else {
@@ -339,24 +341,34 @@ void naitaSeadeid(Request &req, Response &res) {
     res.println("<p>Vali OFF lävi:</p>");
     res.println("<div class='row'>"
                 "<button onclick='setOff(100)'>100</button>"
-                "<button onclick='setOff(150)'>150</button>"
                 "<button onclick='setOff(200)'>200</button>"
-                "<button onclick='setOff(250)'>250</button>"
+                "<button onclick='setOff(300)'>300</button>"
+                "<button onclick='setOff(500)'>500</button>"
                 "</div>");
 
     // ON threshold buttons
     res.println("<p>Vali ON lävi:</p>");
     res.println("<div class='row'>"
-                "<button onclick='setOn(300)'>300</button>"
-                "<button onclick='setOn(350)'>350</button>"
-                "<button onclick='setOn(400)'>400</button>"
-                "<button onclick='setOn(450)'>450</button>"
+                "<button onclick='setOn(700)'>700</button>"
+                "<button onclick='setOn(800)'>800</button>"
+                "<button onclick='setOn(900)'>900</button>"
+                "<button onclick='setOn(1000)'>1000</button>"
                 "</div>");
 
     // Reset button
     res.println("<div class='row'>"
                 "<button class='gray' onclick='resetDefaults()'>Taasta vaikeseaded</button>"
                 "</div>");
+
+    int raw = readLDRRaw(), lvl = ldrLevel();
+    res.println("<hr><h3>Andur</h3>");
+    res.print("<p>RAW: <b id='raw'>"); res.print(raw);
+    res.print("</b> | LVL: <b id='lvl'>"); res.print(lvl);
+    res.print("<br>");
+    res.print("<br>");
+    res.print("</b> <span class='pill'>OFF lävi: "); res.print(LDR_OFF_THRESHOLD);
+    res.print("</span> | <span class='pill'>ON lävi: "); res.print(LDR_ON_THRESHOLD);
+    res.println("</span></p>");
 
     // JavaScript
     res.println("<script>"
@@ -376,6 +388,16 @@ void naitaSeadeid(Request &req, Response &res) {
                 "function resetDefaults(){"
                     "offVal=520; onVal=620; send(); alert('Vaikeseaded taastatud!');"
                 "}"
+
+                "async function tick(){"
+                 "try{"
+                   "const r=await fetch('/status');"
+                   "const j=await r.json();"
+                   "document.getElementById('raw').textContent=j.raw;"
+                   "document.getElementById('lvl').textContent=j.lvl;"
+                 "}catch(e){}"
+               "}"
+               "setInterval(tick,1000); tick();"
                 "</script>");
 
     res.println("</body></html>");
@@ -386,12 +408,25 @@ void statusJson(Request &req, Response &res) {
   res.set("Content-Type", "application/json; charset=utf-8");
   res.print("{\"raw\":"); res.print(readLDRRaw());
   res.print(",\"lvl\":"); res.print(ldrLevel());
+
   res.print(",\"off\":"); res.print(LDR_OFF_THRESHOLD);
-  res.print(",\"on\":"); res.print(LDR_ON_THRESHOLD);
+  res.print(",\"on\":");  res.print(LDR_ON_THRESHOLD);
+
   res.print(",\"trialArmed\":"); res.print(trialArmed ? "true":"false");
   res.print(",\"trialDone\":");  res.print(trialDone ? "true":"false");
   res.print(",\"lastReactionMs\":"); res.print(lastReactionMs);
-  res.print(",\"count\":"); res.print(timesCount);
+
+  res.print(",\"results\":[");
+  for (int i = 0; i < resultCount; i++) {
+      res.print("{\"name\":\"");
+      res.print(results[i].name);
+      res.print("\",\"time\":");
+      res.print(results[i].timeMs);
+      res.print("}");
+      if (i < resultCount - 1) res.print(",");
+  }
+  res.print("]");
+
   res.println("}");
 }
 
@@ -416,9 +451,19 @@ void redirectHome(Response &res) {
 }
 
 void startTrial(Request &req, Response &res) {
-  trialArmed = true; trialDone = false; trialStartMs = millis();
-  activeR=1023; activeG=1023; activeB=1023; setLedColor(activeR,activeG,activeB);
-  Serial.println("START: katse armeeritud, lamp põleb.");
+  trialArmed = false;
+  trialDone = false;
+
+  // NEW: random delay 0–5000 ms
+  unsigned long delayTime = random(0, 5001);
+  waitingForRandom = true;
+  randomDelayEndMs = millis() + delayTime;
+
+  // LED MUST stay OFF during the waiting period
+  setLedColor(0, 0, 0);
+
+  Serial.printf("START: waiting random %lu ms before lighting LED\n", delayTime);
+
   redirectHome(res);
 }
 
@@ -534,28 +579,47 @@ void loop() {
   Serial.println(analogRead(A0));
   delay(500);*/
 
-  if(trialArmed && !trialDone){
-    setLedColor(activeR,activeG,activeB);
-    int lvl=ldrLevel();
-    if (lvl < LDR_OFF_THRESHOLD) {
-    lastReactionMs = millis() - trialStartMs;
+  // --- RANDOM WAIT PHASE ---
+if (waitingForRandom) {
+    // Time to light the LED?
+    if ((long)(millis() - randomDelayEndMs) >= 0) {
+        waitingForRandom = false;
+        trialArmed = true;
+        trialDone = false;
 
-    // OLD array (keep it alive)
-    pushTime(lastReactionMs / 1000.0f);
+        trialStartMs = millis();            // now the real timing starts
+        setLedColor(activeR, activeG, activeB);
 
-    // NEW leaderboard entry
-    addResult(String(participantName), lastReactionMs);
-    sortResults();
-
-    trialDone = true;
-    trialArmed = false;
-    setLedColor(0, 0, 0);
-
-    Serial.printf("KATSE LÕPP — aeg: %.2f s.\n", lastReactionMs / 1000.0f);
-    
-
+        Serial.println("LED ON — reaction timer started");
     }
-  } else setLedColor(0,0,0);
+}
+// --- ACTIVE TRIAL PHASE ---
+else if (trialArmed && !trialDone) {
+
+    int lvl = ldrLevel();
+
+    if (lvl < LDR_OFF_THRESHOLD) {
+
+        lastReactionMs = millis() - trialStartMs;
+
+        // Log to old list
+        pushTime(lastReactionMs / 1000.0f);
+
+        // Add to leaderboard
+        addResult(String(participantName), lastReactionMs);
+        sortResults();
+
+        trialDone = true;
+        trialArmed = false;
+        setLedColor(0, 0, 0);
+
+        Serial.printf("KATSE LÕPP — aeg: %.2f s.\n", lastReactionMs / 1000.0f);
+        }
+    } 
+    else {
+        setLedColor(0, 0, 0);
+    }
+
 
   delay(10);
 }
