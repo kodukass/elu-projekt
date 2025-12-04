@@ -5,10 +5,10 @@
 #include <EEPROM.h>
 
 // EEPROM layout
-#define EEPROM_SIZE 16        // enough for 2 thresholds + 3 RGB values (4 bytes each)
-#define ADDR_LDR_OFF 0        // 2 bytes
-#define ADDR_LDR_ON 2         // 2 bytes
-#define ADDR_LED_R 4          // 2 bytes each
+#define EEPROM_SIZE 16
+#define ADDR_LDR_OFF 0
+#define ADDR_LDR_ON 2
+#define ADDR_LED_R 4
 #define ADDR_LED_G 6
 #define ADDR_LED_B 8
 
