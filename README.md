@@ -72,10 +72,13 @@ Pange see tüki keskel oleva augu alla. Ärge katke sensorit ega auku liimiga! L
 <h3>4. Pange lüliti läbi põhjas oleva ava</h3>
 Vajadusel võib selle sinna liimida. Lüliti peab jääma suunaga alla (mitte kupli ja juhtmete sisse)
 
-<h3>5. Pange kõik juhtmed kupli sisse ja keerake kuppel kinni</h3>
+<h3>5. Laadige NodeMCU plaadile kood</h3>
+See asub kaustas "elu_kood". Laadige see alla oma arvutisse. Avage fail Arduino programmis ja olles kinnitanud plaadi juhtmega arvuti külge ja valinud plaadi tüübiks "NodeMCU 1.0" laadige kood plaadile.
+
+<h3>6. Pange kõik juhtmed kupli sisse ja keerake kuppel kinni</h3>
 <b>NB! Ärge kinnitage valgussensori kinnitus enne keeramist kupli külge. See on kahes osas, et juhtmed ei läheks keeramise ajal katki.</b> Pärast kupli kinni keeramist kinnitage valgussensori kinnitus kupli külge.
 
-<h3>6. Pange lamp lülitist tööle</h3>
+<h3>7. Pange lamp lülitist tööle</h3>
 Allpool on juhised kuidas pääseda juhtimislehele:
 
 <br>
