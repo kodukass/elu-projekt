@@ -36,9 +36,9 @@ Soovitused värvidele selguse mõttes:
 <li>2 x sinine</li>
 </ul>
 </ul>
-<br>
 
-<h3>1. Jootke kõik tükid kokku alloleva skeemi põhjal (Joonis 1)<br></h3>(katsetamiseks võib selle jootmata panna ka breadboard/prototüüpimis laua peale)
+
+<h3>1. Jootke kõik tükid kokku alloleva skeemi põhjal (Joonis 1)<br></h3>(katsetamiseks võib selle jootmata panna ka breadboard'i/prototüüpimis laua peale)
 
 <br>
 
@@ -50,7 +50,7 @@ Soovitused värvidele selguse mõttes:
 
 <h3>2. Seejärel printige välja 3D printeriga reaktsiooni lambi füüsiline mudel:
 
-Link tuleb siia</h3>
+*Link tuleb siia*</h3>
 
 See peaks koosnema kolmest tükkist (Joonis 2):
 <ul>
@@ -87,7 +87,7 @@ Allpool on juhised kuidas pääseda juhtimislehele:
 
 <h3><u>Juhtimislehega ühendumine:</u></h3>
 
-<h3>1. Liituge uues Wi-Fi võrguga "PÕRANDAPOD_WIFI"</h3>
+<h3>1. Liituge arvutis või nutitelefonis uue Wi-Fi võrguga "PÕRANDAPOD_WIFI"</h3>
 Võrgu parool on <b>"salajane123"</b>
 
 <h3>2. Minge veebilehitsejas leheküljele "192.168.4.1"</h3>
@@ -98,10 +98,58 @@ Võrgu parool on <b>"salajane123"</b>
 
 <h3><u>Juhtimislehe kasutamine:</u></h3>
 
-Avaneb lehekülg peab välja nägema sellisena (Joonis 3):
+Avaneb lehekülg peab välja nägema sellisena (Joonis 3 ja 4)
 
-<img src="" alt="joonis 3">
+<img src="juhendi pildid/juhtleht1.jpg" alt="joonis 3">
+<i>Joonis 3 - Juhtimislehekülje esimene pool</i>
 
+<br>
+
+<ul>
+<li>1. Katse tegija nime sisestamine ja salvestamine</li>
+<li>2. Start nupp katse alustamiseks</li>
+<ul>
+<li>NB! Enne katse alustamist tuleb ära seadistada valgusanduri tugevus (selle juhend on allpool)</li>
+</ul>
+<li>3. Lambi hetke olek</li>
+<li>4. Viimane salvestatud aeg (võib vajada lehekülje uuendamist)</li>
+</ul>
+
+<br>
+
+<img src="juhendi pildid/juhtleht2.jpg" alt="joonis 4">
+<i>Joonis 4 - Juhtimislehekülje teine pool</i>
+
+<br>
+
+<ul>
+<li>5. Edetabel kõigi tulemuste jaoks (võib samuti vajada lehekülje uuendamist)</li>
+<li>6. Nupud, et allalaadida tulemused CSV failina ja edetabeli kustutamiseks</li>
+<li>7. Valgusanduri seadete nupp</li>
+<li>8. Värvi valimise nupp. Valikus on kollane ja roheline</li>
+<li>9. Hetkene anduri sisend ja olek</li>
+</ul>
+
+<br>
+<hr>
+
+<h3><u>Seadete leht</u></h3>
+
+Kui vajutada lingile "Anduri seaded" (7), viib see teid leheküljele, kus saab seadistada valgusanduri tugevust.
+
+<img src="juhendi pildid/seaded.jpg" alt="joonis 5">
+<i>Joonis 5 - Anduri seadete leht</i>
+
+<br>
+
+OFF lävi (1) vaatab, millise valguse taseme juures tuleb panna lamp kinni ja ON lävi (2) vaatab, millise valgustaseme juures tuleb lamp hoida töös. Neid peab saama muuta, et erineva pimedusega ruumides oleks võimalik lambil töödata.
+<br>
+Kõige lihtsam viis kuidas neid seadistada on katta lamp käega ja vaadata anduri väljundist (4), mis number on "LVL" ja panna sellele ligilähedane number OFF läviks. Samamoodi saab seadistada ka ON lävi, kui võtta ära kõik takistused anduri eest ja vaadata, mis on "LVL" väärtus. Vajadusel saab ka taastada vaikeseaded (3)
+
+<hr>
+<h3><u>Head kasutamist!</u></h3>
+
+Seda koodi ja 3D mudelit saab vabavaraliselt kasutada igaüks, kes seda soovib. :)
 <hr>
 
 *See seade on tehtud Tallinna Ülikooli ELU projekti raames*
