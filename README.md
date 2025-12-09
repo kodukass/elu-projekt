@@ -50,7 +50,7 @@ Soovitused värvidele selguse mõttes:
 
 <h3>2. Seejärel printige välja 3D printeriga reaktsiooni lambi füüsiline mudel:
 
-*Link tuleb siia*</h3>
+https://www.thingiverse.com/thing:7227706</h3>
 
 See peaks koosnema kolmest tükkist (Joonis 2):
 <ul>
