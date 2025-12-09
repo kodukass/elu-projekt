@@ -67,10 +67,10 @@ See peaks koosnema kolmest tükkist (Joonis 2):
 <br>
 
 <h3>3. Liimige valgussensor tema kinnituse külge</h3>
-Pange see tüki keskel oleva augu alla. Ärge katke sensorit ega auku liimiga! Läbi selle näeb sensor ümbruse heleduse muutumist.
+Pange see tüki keskel oleva augu alla. Vajadusel sobib seda suurendada 6'se puuriga. Väga hästi sobib siia kuumliim. Ärge katke sensorit ega auku liimiga! Läbi selle näeb sensor ümbruse heleduse muutumist.
 
 <h3>4. Pange lüliti läbi põhjas oleva ava</h3>
-Vajadusel võib selle sinna liimida. Lüliti peab jääma suunaga alla (mitte kupli ja juhtmete sisse)
+Vajadusel võib selle sinna liimida. Kui see sinna ei mahu sobib kasutada 6'st puuri ja/või kergelt seda lihvida. Lüliti peab jääma suunaga alla (mitte kupli ja juhtmete sisse)
 
 <h3>5. Laadige NodeMCU plaadile kood</h3>
 See asub kaustas "elu_kood". Laadige see alla oma arvutisse. Avage fail Arduino programmis ja olles kinnitanud plaadi juhtmega arvuti külge ja valinud plaadi tüübiks "NodeMCU 1.0" laadige kood plaadile.
